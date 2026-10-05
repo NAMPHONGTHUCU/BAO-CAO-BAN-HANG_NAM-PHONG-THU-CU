@@ -169,13 +169,10 @@
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-2"></i>Cảnh Báo: Danh Sách Lô Hàng Tồn Kho</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Theo dõi số lượng tồn kho (Cột K) của các lô hàng</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Tính tồn lũy kế đến hết tháng đã chọn (Tổng nhập từ đầu đến tháng chọn trừ đi Tổng bán từ đầu đến tháng chọn). Các mã đã hết hàng (tồn = 0) sẽ được ẩn đi.</p>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <span class="text-xs text-slate-600 font-medium">Lọc theo tháng báo cáo:</span>
-                    <select id="alert-month-filter" onchange="renderInventoryAlertTable()" class="bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2">
-                        <option value="ALL">Tất cả các tháng</option>
-                    </select>
+                    <span id="active-month-badge" class="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-xl font-medium">Tháng: Tất cả các tháng</span>
                 </div>
             </div>
 
@@ -184,8 +181,10 @@
                     <thead>
                         <tr class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                             <th class="p-3">STT</th>
-                            <th class="p-3">Lô Hàng</th>
-                            <th class="p-3 text-center text-rose-600">Lô Hàng Tồn Kho</th>
+                            <th class="p-3">Mã Sản Phẩm / Lô Hàng</th>
+                            <th class="p-3 text-center">Tổng Nhập (Đến tháng chọn)</th>
+                            <th class="p-3 text-center">Đã Bán (Đến tháng chọn)</th>
+                            <th class="p-3 text-center text-rose-600">Tồn Kho Thực Tế</th>
                         </tr>
                     </thead>
                     <tbody id="inventory-alert-tbody" class="divide-y divide-slate-100 text-slate-700">
@@ -248,7 +247,6 @@
             let lines = text.split(/\r\n|\n/);
             let parsed = [];
             
-            // Bắt đầu đọc từ dòng thứ 2 (bỏ qua dòng tiêu đề)
             for (let i = 1; i < lines.length; i++) {
                 let line = lines[i].trim();
                 if (!line) continue;
@@ -277,7 +275,6 @@
             
             rawData = parsed;
             populateMonthFilter();
-            populateAlertMonthFilter();
             filterData();
         }
 
@@ -302,22 +299,14 @@
         }
 
         function populateMonthFilter() {
-            const months = [...new Set(rawData.map(item => item.salesMonth).filter(Boolean))].sort();
-            const select = document.getElementById('month-filter');
-            const currentVal = select.value;
-            select.innerHTML = '<option value="ALL">Tất cả các tháng</option>';
-            months.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m;
-                opt.textContent = m;
-                if (m === currentVal) opt.selected = true;
-                select.appendChild(opt);
+            const months = [...new Set(rawData.map(item => item.salesMonth).filter(Boolean))].sort((a, b) => {
+                const parseM = (str) => {
+                    const parts = str.replace('Tháng ', '').split('/');
+                    return parseInt(parts[1] || '2026') * 100 + parseInt(parts[0] || '1');
+                };
+                return parseM(a) - parseM(b);
             });
-        }
-
-        function populateAlertMonthFilter() {
-            const months = [...new Set(rawData.map(item => item.salesMonth).filter(Boolean))].sort();
-            const select = document.getElementById('alert-month-filter');
+            const select = document.getElementById('month-filter');
             const currentVal = select.value;
             select.innerHTML = '<option value="ALL">Tất cả các tháng</option>';
             months.forEach(m => {
@@ -339,68 +328,124 @@
                 return matchMonth && matchKeyword;
             });
 
-            updateKPIs(filtered);
+            updateKPIs(filtered, selectedMonth);
             renderCharts(rawData);
-            renderInventoryAlertTable();
+            renderInventoryAlertTable(selectedMonth, keyword);
         }
 
-        function renderInventoryAlertTable() {
-            const selectedAlertMonth = document.getElementById('alert-month-filter').value;
+        function getMonthNumeric(monthStr) {
+            if (!monthStr) return 999999;
+            const clean = monthStr.replace('Tháng ', '').trim();
+            const parts = clean.split('/');
+            if (parts.length >= 2) {
+                return parseInt(parts[1]) * 100 + parseInt(parts[0]);
+            }
+            return 999999;
+        }
+
+        function renderInventoryAlertTable(selectedMonth, keyword) {
+            const badge = document.getElementById('active-month-badge');
+            badge.textContent = `Tháng: ${selectedMonth === 'ALL' ? 'Tất cả các tháng' : selectedMonth}`;
+
             const tbody = document.getElementById('inventory-alert-tbody');
             tbody.innerHTML = '';
 
-            let filteredItems = rawData.filter(item => {
-                const matchMonth = (selectedAlertMonth === 'ALL' || item.salesMonth === selectedAlertMonth);
-                const hasInventory = (item.inventory !== null && item.inventory !== undefined && Number(item.inventory) > 0);
-                return matchMonth && hasInventory;
+            // Xác định mốc tháng được chọn để lọc dữ liệu từ tháng chọn trở về trước
+            let relevantData = rawData;
+            if (selectedMonth !== 'ALL') {
+                const selNum = getMonthNumeric(selectedMonth);
+                relevantData = rawData.filter(item => {
+                    const mNum = getMonthNumeric(item.salesMonth || item.importMonth);
+                    return mNum <= selNum;
+                });
+            }
+
+            // Gom nhóm theo mã sản phẩm (Cột B): Tính tổng nhập và tổng bán từ đầu đến hết tháng được chọn
+            let productSummary = {};
+            relevantData.forEach(item => {
+                let prod = item.product;
+                if (!prod) return;
+                if (!productSummary[prod]) {
+                    productSummary[prod] = {
+                        product: prod,
+                        totalImport: 0,
+                        totalSold: 0
+                    };
+                }
+                productSummary[prod].totalImport += (item.totalQty || 0);
+                productSummary[prod].totalSold += (item.soldQty || 0);
             });
 
-            if (filteredItems.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-slate-400 italic">Không có lô hàng tồn kho nào trong tháng này.</td></tr>`;
+            let summaryList = Object.values(productSummary).map(item => {
+                let inventoryQty = item.totalImport - item.totalSold;
+                if (inventoryQty < 0) inventoryQty = 0;
+                return {
+                    product: item.product,
+                    totalImport: item.totalImport,
+                    totalSold: item.totalSold,
+                    inventory: inventoryQty
+                };
+            });
+
+            // Lọc bỏ các mã hàng đã hết hàng (tồn <= 0)
+            summaryList = summaryList.filter(item => item.inventory > 0);
+
+            // Lọc theo từ khóa tìm kiếm sản phẩm nếu có
+            if (keyword) {
+                summaryList = summaryList.filter(item => item.product.toLowerCase().includes(keyword));
+            }
+
+            if (summaryList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400 italic">Không có lô hàng tồn kho nào (các mặt hàng đều đã bán hết hoặc không có dữ liệu).</td></tr>`;
                 return;
             }
 
-            filteredItems.forEach((item, index) => {
+            summaryList.forEach((item, index) => {
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition-colors";
                 tr.innerHTML = `
                     <td class="p-3 font-medium text-slate-500">${index + 1}</td>
-                    <td class="p-3 font-semibold text-slate-900">${item.product || '-'}</td>
+                    <td class="p-3 font-semibold text-slate-900">${item.product}</td>
+                    <td class="p-3 text-center text-slate-700">${formatNumber(item.totalImport)}</td>
+                    <td class="p-3 text-center text-slate-700">${formatNumber(item.totalSold)}</td>
                     <td class="p-3 text-center font-bold text-rose-600 bg-rose-50/50">${formatNumber(item.inventory)}</td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        function updateKPIs(data) {
-            let totalRev = data.reduce((sum, item) => sum + (item.revenue || 0), 0);
-            let totalProf = data.reduce((sum, item) => sum + (item.profit || 0), 0);
-            let totalOpt = data.reduce((sum, item) => sum + (item.opt || 0), 0);
-            let totalSold = data.reduce((sum, item) => sum + (item.soldQty || 0), 0);
+        function updateKPIs(filteredData, selectedMonth) {
+            let totalRev = filteredData.reduce((sum, item) => sum + (item.revenue || 0), 0);
+            let totalProf = filteredData.reduce((sum, item) => sum + (item.profit || 0), 0);
+            let totalOpt = filteredData.reduce((sum, item) => sum + (item.opt || 0), 0);
+            let totalSold = filteredData.reduce((sum, item) => sum + (item.soldQty || 0), 0);
             
-            let sortedRaw = [...rawData].sort((a, b) => {
-                const getVal = (m) => {
-                    if (!m) return 0;
-                    const parts = m.replace('Tháng ', '').split('/');
-                    return parseInt(parts[1] || '2026') * 100 + parseInt(parts[0] || '1');
-                };
-                return getVal(a.salesMonth) - getVal(b.salesMonth);
-            });
+            // Tính tổng tồn kho lũy kế từ đầu đến tháng chọn (chỉ tính các mã còn tồn > 0)
+            let relevantData = rawData;
+            if (selectedMonth !== 'ALL') {
+                const selNum = getMonthNumeric(selectedMonth);
+                relevantData = rawData.filter(item => {
+                    const mNum = getMonthNumeric(item.salesMonth || item.importMonth);
+                    return mNum <= selNum;
+                });
+            }
 
-            let productLatestInventory = {};
-            sortedRaw.forEach(item => {
-                if (item.product) {
-                    productLatestInventory[item.product] = item.inventory !== undefined && item.inventory !== null ? Number(item.inventory) : 0;
+            let productSummary = {};
+            relevantData.forEach(item => {
+                let prod = item.product;
+                if (!prod) return;
+                if (!productSummary[prod]) {
+                    productSummary[prod] = { totalImport: 0, totalSold: 0 };
                 }
+                productSummary[prod].totalImport += (item.totalQty || 0);
+                productSummary[prod].totalSold += (item.soldQty || 0);
             });
 
             let totalInv = 0;
-            const selectedMonth = document.getElementById('month-filter').value;
-            if (selectedMonth === 'ALL') {
-                totalInv = Object.values(productLatestInventory).reduce((sum, val) => sum + val, 0);
-            } else {
-                totalInv = data.reduce((sum, item) => sum + (typeof item.inventory === 'number' ? item.inventory : 0), 0);
-            }
+            Object.values(productSummary).forEach(item => {
+                let inv = item.totalImport - item.totalSold;
+                if (inv > 0) totalInv += inv;
+            });
 
             document.getElementById('kpi-revenue').textContent = formatVND(totalRev);
             document.getElementById('kpi-profit').textContent = formatVND(totalProf);
@@ -422,7 +467,14 @@
                 monthMap[m].soldQty += (item.soldQty || 0);
             });
 
-            let months = Object.keys(monthMap).sort();
+            let months = Object.keys(monthMap).sort((a, b) => {
+                const parseM = (str) => {
+                    const parts = str.replace('Tháng ', '').split('/');
+                    return parseInt(parts[1] || '2026') * 100 + parseInt(parts[0] || '1');
+                };
+                return parseM(a) - parseM(b);
+            });
+
             let shortMonths = months.map(m => m.replace('Tháng ', 'T'));
             let revenues = months.map(m => Math.round(monthMap[m].revenue / 1000000)); 
             let profits = months.map(m => Math.round(monthMap[m].profit / 1000000));   
