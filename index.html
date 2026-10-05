@@ -23,18 +23,14 @@
                 </div>
                 <div>
                     <h1 class="text-base sm:text-lg font-bold text-slate-900">Nam Phong Thu Cũ - Dashboard</h1>
-                    <p class="text-xs text-slate-500 hidden sm:block">Hệ thống phân tích Tài chính, Doanh thu & Tối ưu độc lập</p>
+                    <p class="text-xs text-slate-500 hidden sm:block">Hệ thống phân tích Tài chính, Doanh thu & Tối ưu trực tuyến từ Google Sheet</p>
                 </div>
             </div>
             
             <div class="flex items-center space-x-2 sm:space-x-3">
-                <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vSVlQAxvheRlRdZ9vKcyaI1EBW_sdFkYg1_gagt2-8shOB-bi5kSyF3VXgWTKl-_g/pubhtml" target="_blank" class="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-medium py-2 px-3 rounded-xl shadow transition duration-200">
-                    <i class="fa-solid fa-file-excel"></i>
-                    <span>Mở Google Sheet</span>
-                </a>
-                <button onclick="refreshData()" class="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium py-2 px-4 rounded-xl shadow transition duration-200">
+                <button onclick="fetchGoogleSheetData()" class="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium py-2 px-4 rounded-xl shadow transition duration-200">
                     <i id="refresh-icon" class="fa-solid fa-rotate"></i>
-                    <span>Refresh dữ liệu</span>
+                    <span>Tải lại dữ liệu (Refresh)</span>
                 </button>
             </div>
         </div>
@@ -55,8 +51,8 @@
                     <input type="text" id="search-input" oninput="filterData()" placeholder="Tìm tên sản phẩm..." class="bg-slate-50 border border-slate-300 text-slate-900 text-xs sm:text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2 w-40 sm:w-56">
                 </div>
             </div>
-            <div id="sync-status" class="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center">
-                <i class="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i> Đang đồng bộ tự động từ Google Sheet nguồn.
+            <div id="sync-status" class="text-xs text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl flex items-center">
+                <i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-indigo-600"></i> Đang kết nối Google Sheet...
             </div>
         </div>
 
@@ -204,9 +200,8 @@
     <script>
         Chart.register(ChartDataLabels);
 
+        const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSVlQAxvheRlRdZ9vKcyaI1EBW_sdFkYg1_gagt2-8shOB-bi5kSyF3VXgWTKl-_g/pub?output=csv';
         let rawData = [];
-        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSVlQAxvheRlRdZ9vKcyaI1EBW_sdFkYg1_gagt2-8shOB-bi5kSyF3VXgWTKl-_g/pub?output=csv";
-
         let charts = {};
 
         function formatVND(num) {
@@ -223,113 +218,87 @@
             fetchGoogleSheetData();
         });
 
-        async function fetchGoogleSheetData(isRefresh = false) {
-            const statusDiv = document.getElementById('sync-status');
-            if (isRefresh) {
-                statusDiv.innerHTML = `<i class="fa-solid fa-rotate fa-spin mr-1.5 text-indigo-600"></i> Đang làm mới dữ liệu từ Google Sheet...`;
-            }
+        function fetchGoogleSheetData() {
+            const icon = document.getElementById('refresh-icon');
+            icon.classList.add('fa-spin');
+            
+            const statusEl = document.getElementById('sync-status');
+            statusEl.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-indigo-600"></i> Đang tải dữ liệu từ Google Sheet...`;
 
-            try {
-                // Sử dụng proxy chống CORS để lấy dữ liệu trực tiếp ổn định từ Google Sheets
-                const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(GOOGLE_SHEET_CSV_URL + '&t=' + new Date().getTime());
-                const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error('Không thể kết nối đến Google Sheet');
-                const csvText = await response.text();
-                
-                parseCSV(csvText);
-                
-                populateMonthFilter();
-                populateAlertMonthFilter();
-                filterData();
-
-                statusDiv.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i> Đã cập nhật thành công từ Google Sheet.`;
-                if (isRefresh) {
-                    showNotification("Đã làm mới dữ liệu từ Google Sheet thành công!");
-                }
-            } catch (error) {
-                console.error('Lỗi tải dữ liệu, chuyển sang dữ liệu chuẩn dự phòng:', error);
-                statusDiv.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i> Sử dụng dữ liệu đồng bộ chuẩn hệ thống.`;
-                loadFallbackData();
-            }
-
-            if (isRefresh) {
-                const icon = document.getElementById('refresh-icon');
-                icon.classList.remove('fa-spin');
-            }
+            fetch(SHEET_URL + '&t=' + new Date().getTime())
+                .then(response => {
+                    if (!response.ok) throw new Error('Không thể kết nối đến Google Sheet');
+                    return response.text();
+                })
+                .then(csvText => {
+                    parseCSV(csvText);
+                    icon.classList.remove('fa-spin');
+                    statusEl.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i> Đồng bộ thành công từ Google Sheet.`;
+                    showNotification("Đã làm mới dữ liệu từ Google Sheet!");
+                })
+                .catch(error => {
+                    console.error(error);
+                    icon.classList.remove('fa-spin');
+                    statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5 text-rose-600"></i> Lỗi kết nối Google Sheet.`;
+                    showNotification("Không thể tải dữ liệu từ Google Sheet!", true);
+                });
         }
 
         function parseCSV(text) {
-            const lines = text.split('\n');
+            let lines = text.split(/\r\n|\n/);
             let parsed = [];
             
+            // Bắt đầu đọc từ dòng thứ 2 (bỏ qua dòng tiêu đề)
             for (let i = 1; i < lines.length; i++) {
                 let line = lines[i].trim();
                 if (!line) continue;
                 
-                let row = [];
-                let inQuotes = false;
-                let currentVal = '';
-                for (let char of line) {
-                    if (char === '"') {
-                        inQuotes = !inQuotes;
-                    } else if (char === ',' && !inQuotes) {
-                        row.push(currentVal.trim());
-                        currentVal = '';
-                    } else {
-                        currentVal += char;
+                let row = parseCSVLine(line);
+                if (row.length >= 11) {
+                    let stt = parseInt(row[0]) || (parsed.length + 1);
+                    let product = row[1] || '';
+                    let importMonth = row[2] || '';
+                    let totalQty = parseFloat(row[3].replace(/[,.]/g, '')) || 0;
+                    let soldQty = parseFloat(row[4].replace(/[,.]/g, '')) || 0;
+                    let salesMonth = row[5] || '';
+                    let cost = parseFloat(row[6].replace(/[,.]/g, '')) || 0;
+                    let revenue = parseFloat(row[7].replace(/[,.]/g, '')) || 0;
+                    let profit = parseFloat(row[8].replace(/[,.]/g, '')) || 0;
+                    let opt = parseFloat(row[9].replace(/[,.]/g, '')) || 0;
+                    let inventory = parseFloat(row[10].replace(/[,.]/g, '')) || 0;
+
+                    if (product) {
+                        parsed.push({
+                            stt, product, importMonth, totalQty, soldQty, salesMonth, cost, revenue, profit, opt, inventory
+                        });
                     }
                 }
-                row.push(currentVal.trim());
-
-                if (row.length >= 2 && row[1]) {
-                    // Loại bỏ ký tự phân cách hàng nghìn (dấu phẩy hoặc dấu chấm) trong các cột số liệu tài chính/số lượng
-                    const cleanNum = (val) => {
-                        if (!val) return null;
-                        let clean = val.replace(/["\s]/g, '').replace(/\./g, '').replace(/,/g, '');
-                        return !isNaN(clean) && clean !== '' ? Number(clean) : null;
-                    };
-
-                    parsed.push({
-                        stt: parseInt(row[0]) || (parsed.length + 1),
-                        product: row[1],
-                        importMonth: row[2] || '',
-                        totalQty: cleanNum(row[3]),
-                        soldQty: cleanNum(row[4]),
-                        salesMonth: row[5] || '',
-                        cost: cleanNum(row[6]),
-                        revenue: cleanNum(row[7]),
-                        profit: cleanNum(row[8]),
-                        opt: cleanNum(row[9]),
-                        inventory: cleanNum(row[10]) !== null ? cleanNum(row[10]) : 0
-                    });
-                }
             }
-
-            if (parsed.length > 0 && parsed.some(item => item.revenue > 0 || item.soldQty > 0)) {
-                rawData = parsed;
-            } else {
-                loadFallbackData();
-            }
-        }
-
-        function loadFallbackData() {
-            // Bộ dữ liệu chuẩn xác thực tế từ Google Sheet Nam Phong Thu Cũ
-            rawData = [
-                { stt: 1, product: "Lô hàng mẫu Find N3", importMonth: "Tháng 12/2025", totalQty: 10, soldQty: 2, salesMonth: "Tháng 01/2026", cost: 150000000, revenue: 180000000, profit: 30000000, opt: 5000000, inventory: 8 },
-                { stt: 2, product: "Lô hàng Find N3 Flip", importMonth: "Tháng 12/2025", totalQty: 295, soldQty: 45, salesMonth: "Tháng 01/2026", cost: 1200000000, revenue: 1450000000, profit: 250000000, opt: 45000000, inventory: 250 },
-                { stt: 3, product: "Lô hàng Reno12 series", importMonth: "Tháng 12/2025", totalQty: 740, soldQty: 150, salesMonth: "Tháng 02/2026", cost: 3500000000, revenue: 4200000000, profit: 700000000, opt: 120000000, inventory: 590 },
-                { stt: 4, product: "Lô hàng iPhone 14 Pro", importMonth: "Tháng 01/2026", totalQty: 500, soldQty: 120, salesMonth: "Tháng 03/2026", cost: 11000000000, revenue: 13500000000, profit: 2500000000, opt: 300000000, inventory: 380 },
-                { stt: 5, product: "Lô hàng iPhone 15 Promax", importMonth: "Tháng 02/2026", totalQty: 800, soldQty: 210, salesMonth: "Tháng 04/2026", cost: 22000000000, revenue: 26000000000, profit: 4000000000, opt: 850000000, inventory: 590 }
-            ];
+            
+            rawData = parsed;
             populateMonthFilter();
             populateAlertMonthFilter();
             filterData();
         }
 
-        function refreshData() {
-            const icon = document.getElementById('refresh-icon');
-            icon.classList.add('fa-spin');
-            fetchGoogleSheetData(true);
+        function parseCSVLine(text) {
+            let result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                let c = text[i];
+                if (c === '"') {
+                    inQuotes = !inQuotes;
+                } else if (c === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += c;
+                }
+            }
+            result.push(current.trim());
+            return result.map(val => val.replace(/^"|"$/g, ''));
         }
 
         function populateMonthFilter() {
@@ -457,10 +426,10 @@
             let shortMonths = months.map(m => m.replace('Tháng ', 'T'));
             let revenues = months.map(m => Math.round(monthMap[m].revenue / 1000000)); 
             let profits = months.map(m => Math.round(monthMap[m].profit / 1000000));   
-            let opts = months.map(m => Math.round(monthMap[m].opt / 1000000));         
+            let opts = months.map(m => Math.round(monthMap[m].opt / 1000000));        
             let volumes = months.map(m => monthMap[m].soldQty);
 
-            const commonOptions = (unitLabel) => ({
+            const commonOptions = () => ({
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
@@ -498,7 +467,7 @@
                         borderRadius: 6,
                     }]
                 },
-                options: commonOptions('Tr VNĐ')
+                options: commonOptions()
             });
 
             const ctxVolume = document.getElementById('volumeChart').getContext('2d');
@@ -513,7 +482,7 @@
                         borderRadius: 6,
                     }]
                 },
-                options: commonOptions('Chiếc')
+                options: commonOptions()
             });
 
             const ctxProfit = document.getElementById('profitChart').getContext('2d');
@@ -528,7 +497,7 @@
                         borderRadius: 6,
                     }]
                 },
-                options: commonOptions('Tr VNĐ')
+                options: commonOptions()
             });
 
             const ctxOpt = document.getElementById('optimizationChart').getContext('2d');
@@ -543,13 +512,13 @@
                         borderRadius: 6,
                     }]
                 },
-                options: commonOptions('Tr VNĐ')
+                options: commonOptions()
             });
         }
 
-        function showNotification(message) {
+        function showNotification(message, isError = false) {
             const div = document.createElement('div');
-            div.className = `fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all transform translate-y-2 opacity-0 bg-slate-800`;
+            div.className = `fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all transform translate-y-2 opacity-0 ${isError ? 'bg-rose-600' : 'bg-slate-800'}`;
             div.textContent = message;
             document.body.appendChild(div);
             setTimeout(() => { div.classList.remove('translate-y-2', 'opacity-0'); }, 50);
