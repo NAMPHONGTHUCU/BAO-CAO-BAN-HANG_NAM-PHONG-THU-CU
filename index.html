@@ -27,7 +27,6 @@
                 </div>
             </div>
             
-            <!-- Google Sheet integration & Refresh Button -->
             <div class="flex items-center space-x-2 sm:space-x-3">
                 <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vSVlQAxvheRlRdZ9vKcyaI1EBW_sdFkYg1_gagt2-8shOB-bi5kSyF3VXgWTKl-_g/pubhtml" target="_blank" class="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-medium py-2 px-3 rounded-xl shadow transition duration-200">
                     <i class="fa-solid fa-file-excel"></i>
@@ -173,7 +172,7 @@
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-2"></i>Cảnh Báo: Danh Sách Lô Hàng Tồn Kho Chưa Phát Sinh Bán</h2>
+                    <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-2"></i>Cảnh Báo: Danh Sách Lô Hàng Tồn Kho</h2>
                     <p class="text-xs text-slate-500 mt-0.5">Theo dõi số lượng tồn kho (Cột K) của các lô hàng</p>
                 </div>
                 <div class="flex items-center space-x-2">
@@ -224,7 +223,7 @@
             fetchGoogleSheetData();
         });
 
-        // Hàm đọc và phân tích dữ liệu CSV từ Google Sheet
+        // Hàm đọc và phân tích dữ liệu CSV từ Google Sheet nguồn
         async function fetchGoogleSheetData(isRefresh = false) {
             const statusDiv = document.getElementById('sync-status');
             if (isRefresh) {
@@ -258,17 +257,15 @@
             }
         }
 
-        // Hàm xử lý chuỗi CSV thành mảng đối tượng
+        // Hàm xử lý chuỗi CSV chuẩn xác
         function parseCSV(text) {
             const lines = text.split('\n');
             let parsed = [];
             
-            // Giả sử dòng đầu tiên là tiêu đề, bắt đầu duyệt từ dòng thứ 2 (index 1)
             for (let i = 1; i < lines.length; i++) {
                 let line = lines[i].trim();
                 if (!line) continue;
                 
-                // Xử lý tách cột CSV (hỗ trợ dấu phẩy trong ngoặc kép nếu có)
                 let row = [];
                 let inQuotes = false;
                 let currentVal = '';
@@ -284,8 +281,6 @@
                 }
                 row.push(currentVal.trim());
 
-                // Ánh xạ các cột tương ứng theo cấu trúc Sheet của bạn
-                // STT(0), Product(1), ImportMonth(2), TotalQty(3), SoldQty(4), SalesMonth(5), Cost(6), Revenue(7), Profit(8), Opt(9), Inventory(10)
                 if (row.length >= 2 && row[1]) {
                     parsed.push({
                         stt: parseInt(row[0]) || (parsed.length + 1),
@@ -481,7 +476,6 @@
                 }
             });
 
-            // Chart 1: Doanh Thu
             const ctxRev = document.getElementById('revenueChart').getContext('2d');
             if (charts.revenue) charts.revenue.destroy();
             charts.revenue = new Chart(ctxRev, {
@@ -497,7 +491,6 @@
                 options: commonOptions('Tr VNĐ')
             });
 
-            // Chart 2: Sản Lượng
             const ctxVolume = document.getElementById('volumeChart').getContext('2d');
             if (charts.volume) charts.volume.destroy();
             charts.volume = new Chart(ctxVolume, {
@@ -513,7 +506,6 @@
                 options: commonOptions('Chiếc')
             });
 
-            // Chart 3: Lợi Nhuận
             const ctxProfit = document.getElementById('profitChart').getContext('2d');
             if (charts.profit) charts.profit.destroy();
             charts.profit = new Chart(ctxProfit, {
@@ -529,7 +521,6 @@
                 options: commonOptions('Tr VNĐ')
             });
 
-            // Chart 4: Tối Ưu
             const ctxOpt = document.getElementById('optimizationChart').getContext('2d');
             if (charts.optimization) charts.optimization.destroy();
             charts.optimization = new Chart(ctxOpt, {
@@ -554,7 +545,7 @@
             setTimeout(() => { div.classList.remove('translate-y-2', 'opacity-0'); }, 50);
             setTimeout(() => {
                 div.classList.add('translate-y-2', 'opacity-0');
-                setTimeout(() => div.remove(), 300);
+                setTimeout(() => div.reset?.() || div.remove(), 300);
             }, 3500);
         }
     </script>
