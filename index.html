@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Báo Cáo Bán Hàng Nam Phong Thu Cũ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-md">
+                    <i class="fa-solid fa-chart-line text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold text-slate-900">Nam Phong Thu Cũ - Dashboard</h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">Hệ thống phân tích Tài chính, Doanh thu & Tối ưu độc lập</p>
+                </div>
+            </div>
+            
+            <!-- Google Sheet integration & Refresh Button -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vSVlQAxvheRlRdZ9vKcyaI1EBW_sdFkYg1_gagt2-8shOB-bi5kSyF3VXgWTKl-_g/pubhtml" target="_blank" class="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-medium py-2 px-3 rounded-xl shadow transition duration-200">
+                    <i class="fa-solid fa-file-excel"></i>
+                    <span>Mở Google Sheet</span>
+                </a>
+                <button onclick="refreshData()" class="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium py-2 px-4 rounded-xl shadow transition duration-200">
+                    <i id="refresh-icon" class="fa-solid fa-rotate"></i>
+                    <span>Refresh dữ liệu</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs sm:text-sm font-medium text-slate-700"><i class="fa-solid fa-filter mr-1 text-indigo-600"></i> Tháng bán:</span>
+                    <select id="month-filter" onchange="filterData()" class="bg-slate-50 border border-slate-300 text-slate-900 text-xs sm:text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2">
+                        <option value="ALL">Tất cả các tháng</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs sm:text-sm font-medium text-slate-700">Sản phẩm:</span>
+                    <input type="text" id="search-input" oninput="filterData()" placeholder="Tìm tên sản phẩm..." class="bg-slate-50 border border-slate-300 text-slate-900 text-xs sm:text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2 w-40 sm:w-56">
+                </div>
+            </div>
+            <div id="sync-status" class="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center">
+                <i class="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i> Đang đồng bộ tự động từ Google Sheet nguồn.
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng Doanh Thu</span>
+                    <div class="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                        <i class="fa-solid fa-sack-dollar text-base"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h3 id="kpi-revenue" class="text-lg sm:text-xl font-bold text-slate-900">0 VNĐ</h3>
+                    <p class="text-xs text-slate-400 mt-1">Toàn bộ kỳ báo cáo</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Lợi Nhuận Bán Hàng</span>
+                    <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                        <i class="fa-solid fa-chart-pie text-base"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h3 id="kpi-profit" class="text-lg sm:text-xl font-bold text-slate-900">0 VNĐ</h3>
+                    <p class="text-xs text-slate-400 mt-1">Lợi nhuận gộp thực tế</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng Tối Ưu</span>
+                    <div class="p-2 bg-purple-50 text-purple-600 rounded-xl">
+                        <i class="fa-solid fa-sliders text-base"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h3 id="kpi-optimization" class="text-lg sm:text-xl font-bold text-slate-900">0 VNĐ</h3>
+                    <p class="text-xs text-slate-400 mt-1">Giá trị tối ưu độc lập</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng Bán Ra</span>
+                    <div class="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                        <i class="fa-solid fa-cart-shopping text-base"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h3 id="kpi-sold" class="text-lg sm:text-xl font-bold text-slate-900">0</h3>
+                    <p class="text-xs text-slate-400 mt-1">Sản phẩm xuất kho</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng Tồn Kho Cuối</span>
+                    <div class="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                        <i class="fa-solid fa-boxes-stacked text-base"></i>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h3 id="kpi-inventory" class="text-lg sm:text-xl font-bold text-slate-900">0</h3>
+                    <p class="text-xs text-slate-400 mt-1">Số lượng hiện tại</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Doanh Thu Theo Tháng Bán Ra</h2>
+                    <span class="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">Đơn vị: Triệu đồng</span>
+                </div>
+                <div class="relative flex-1 min-h-[300px]">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Sản Lượng Theo Tháng</h2>
+                    <span class="text-xs text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg">Đơn vị: Chiếc</span>
+                </div>
+                <div class="relative flex-1 min-h-[300px]">
+                    <canvas id="volumeChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Lợi Nhuận Bán Hàng</h2>
+                    <span class="text-xs text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Đơn vị: Triệu đồng</span>
+                </div>
+                <div class="relative flex-1 min-h-[300px]">
+                    <canvas id="profitChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-slate-900">Tối Ưu</h2>
+                    <span class="text-xs text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg">Đơn vị: Triệu đồng</span>
+                </div>
+                <div class="relative flex-1 min-h-[320px]">
+                    <canvas id="optimizationChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-2"></i>Cảnh Báo: Danh Sách Lô Hàng Tồn Kho Chưa Phát Sinh Bán</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Theo dõi số lượng tồn kho (Cột K) của các lô hàng</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-slate-600 font-medium">Lọc theo tháng báo cáo:</span>
+                    <select id="alert-month-filter" onchange="renderInventoryAlertTable()" class="bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2">
+                        <option value="ALL">Tất cả các tháng</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                            <th class="p-3">STT</th>
+                            <th class="p-3">Lô Hàng</th>
+                            <th class="p-3 text-center text-rose-600">Lô Hàng Tồn Kho</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-alert-tbody" class="divide-y divide-slate-100 text-slate-700">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        Chart.register(ChartDataLabels);
+
+        let rawData = [];
+        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSVlQAxvheRlRdZ9vKcyaI1EBW_sdFkYg1_gagt2-8shOB-bi5kSyF3VXgWTKl-_g/pub?output=csv";
+
+        let charts = {};
+
+        function formatVND(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            return num.toLocaleString('vi-VN') + ' VNĐ';
+        }
+
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            return num.toLocaleString('vi-VN');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchGoogleSheetData();
+        });
+
+        // Hàm đọc và phân tích dữ liệu CSV từ Google Sheet
+        async function fetchGoogleSheetData(isRefresh = false) {
+            const statusDiv = document.getElementById('sync-status');
+            if (isRefresh) {
+                statusDiv.innerHTML = `<i class="fa-solid fa-rotate fa-spin mr-1.5 text-indigo-600"></i> Đang làm mới dữ liệu từ Google Sheet...`;
+            }
+
+            try {
+                const response = await fetch(GOOGLE_SHEET_CSV_URL + '&t=' + new Date().getTime());
+                if (!response.ok) throw new Error('Không thể kết nối đến Google Sheet');
+                const csvText = await response.text();
+                
+                parseCSV(csvText);
+                
+                populateMonthFilter();
+                populateAlertMonthFilter();
+                filterData();
+
+                statusDiv.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i> Đã cập nhật thành công từ Google Sheet.`;
+                if (isRefresh) {
+                    showNotification("Đã làm mới dữ liệu từ Google Sheet thành công!");
+                }
+            } catch (error) {
+                console.error('Lỗi tải dữ liệu:', error);
+                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5 text-rose-600"></i> Lỗi tải Google Sheet, dùng dữ liệu dự phòng.`;
+                loadFallbackData();
+            }
+
+            if (isRefresh) {
+                const icon = document.getElementById('refresh-icon');
+                icon.classList.remove('fa-spin');
+            }
+        }
+
+        // Hàm xử lý chuỗi CSV thành mảng đối tượng
+        function parseCSV(text) {
+            const lines = text.split('\n');
+            let parsed = [];
+            
+            // Giả sử dòng đầu tiên là tiêu đề, bắt đầu duyệt từ dòng thứ 2 (index 1)
+            for (let i = 1; i < lines.length; i++) {
+                let line = lines[i].trim();
+                if (!line) continue;
+                
+                // Xử lý tách cột CSV (hỗ trợ dấu phẩy trong ngoặc kép nếu có)
+                let row = [];
+                let inQuotes = false;
+                let currentVal = '';
+                for (let char of line) {
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        row.push(currentVal.trim());
+                        currentVal = '';
+                    } else {
+                        currentVal += char;
+                    }
+                }
+                row.push(currentVal.trim());
+
+                // Ánh xạ các cột tương ứng theo cấu trúc Sheet của bạn
+                // STT(0), Product(1), ImportMonth(2), TotalQty(3), SoldQty(4), SalesMonth(5), Cost(6), Revenue(7), Profit(8), Opt(9), Inventory(10)
+                if (row.length >= 2 && row[1]) {
+                    parsed.push({
+                        stt: parseInt(row[0]) || (parsed.length + 1),
+                        product: row[1],
+                        importMonth: row[2] || '',
+                        totalQty: row[3] !== '' && !isNaN(row[3]) ? Number(row[3]) : null,
+                        soldQty: row[4] !== '' && !isNaN(row[4]) ? Number(row[4]) : null,
+                        salesMonth: row[5] || '',
+                        cost: row[6] !== '' && !isNaN(row[6]) ? Number(row[6]) : null,
+                        revenue: row[7] !== '' && !isNaN(row[7]) ? Number(row[7]) : null,
+                        profit: row[8] !== '' && !isNaN(row[8]) ? Number(row[8]) : null,
+                        opt: row[9] !== '' && !isNaN(row[9]) ? Number(row[9]) : null,
+                        inventory: row[10] !== '' && !isNaN(row[10]) ? Number(row[10]) : 0
+                    });
+                }
+            }
+
+            if (parsed.length > 0) {
+                rawData = parsed;
+            } else {
+                loadFallbackData();
+            }
+        }
+
+        function loadFallbackData() {
+            rawData = [
+                { stt: 1, product: "Demo Find N3", importMonth: "Tháng 12/2025", totalQty: 10, soldQty: null, salesMonth: "Tháng 01/2026", cost: null, revenue: null, profit: null, opt: null, inventory: 10 },
+                { stt: 2, product: "Demo Find N3 Flip", importMonth: "Tháng 12/2025", totalQty: 295, soldQty: 5, salesMonth: "Tháng 01/2026", cost: null, revenue: 23000000, profit: null, opt: 10370500, inventory: 290 },
+                { stt: 3, product: "Demo Reno12 series", importMonth: "Tháng 12/2025", totalQty: 740, soldQty: 47, salesMonth: "Tháng 01/2026", cost: null, revenue: 187800000, profit: null, opt: 8236331, inventory: 693 }
+            ];
+            populateMonthFilter();
+            populateAlertMonthFilter();
+            filterData();
+        }
+
+        function refreshData() {
+            const icon = document.getElementById('refresh-icon');
+            icon.classList.add('fa-spin');
+            fetchGoogleSheetData(true);
+        }
+
+        function populateMonthFilter() {
+            const months = [...new Set(rawData.map(item => item.salesMonth).filter(Boolean))].sort();
+            const select = document.getElementById('month-filter');
+            const currentVal = select.value;
+            select.innerHTML = '<option value="ALL">Tất cả các tháng</option>';
+            months.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                if (m === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function populateAlertMonthFilter() {
+            const months = [...new Set(rawData.map(item => item.salesMonth).filter(Boolean))].sort();
+            const select = document.getElementById('alert-month-filter');
+            const currentVal = select.value;
+            select.innerHTML = '<option value="ALL">Tất cả các tháng</option>';
+            months.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                if (m === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function filterData() {
+            const selectedMonth = document.getElementById('month-filter').value;
+            const keyword = document.getElementById('search-input').value.toLowerCase().trim();
+
+            let filtered = rawData.filter(item => {
+                const matchMonth = (selectedMonth === 'ALL' || item.salesMonth === selectedMonth);
+                const matchKeyword = (!keyword || (item.product && item.product.toLowerCase().includes(keyword)));
+                return matchMonth && matchKeyword;
+            });
+
+            updateKPIs(filtered);
+            renderCharts(rawData);
+            renderInventoryAlertTable();
+        }
+
+        function renderInventoryAlertTable() {
+            const selectedAlertMonth = document.getElementById('alert-month-filter').value;
+            const tbody = document.getElementById('inventory-alert-tbody');
+            tbody.innerHTML = '';
+
+            let filteredItems = rawData.filter(item => {
+                const matchMonth = (selectedAlertMonth === 'ALL' || item.salesMonth === selectedAlertMonth);
+                const hasInventory = (item.inventory !== null && item.inventory !== undefined && Number(item.inventory) > 0);
+                return matchMonth && hasInventory;
+            });
+
+            if (filteredItems.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-slate-400 italic">Không có lô hàng tồn kho nào trong tháng này.</td></tr>`;
+                return;
+            }
+
+            filteredItems.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-3 font-medium text-slate-500">${index + 1}</td>
+                    <td class="p-3 font-semibold text-slate-900">${item.product || '-'}</td>
+                    <td class="p-3 text-center font-bold text-rose-600 bg-rose-50/50">${formatNumber(item.inventory)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateKPIs(data) {
+            let totalRev = data.reduce((sum, item) => sum + (item.revenue || 0), 0);
+            let totalProf = data.reduce((sum, item) => sum + (item.profit || 0), 0);
+            let totalOpt = data.reduce((sum, item) => sum + (item.opt || 0), 0);
+            let totalSold = data.reduce((sum, item) => sum + (item.soldQty || 0), 0);
+            
+            let sortedRaw = [...rawData].sort((a, b) => {
+                const getVal = (m) => {
+                    if (!m) return 0;
+                    const parts = m.replace('Tháng ', '').split('/');
+                    return parseInt(parts[1] || '2025') * 100 + parseInt(parts[0] || '1');
+                };
+                return getVal(a.salesMonth) - getVal(b.salesMonth);
+            });
+
+            let productLatestInventory = {};
+            sortedRaw.forEach(item => {
+                if (item.product) {
+                    productLatestInventory[item.product] = item.inventory !== undefined && item.inventory !== null ? Number(item.inventory) : 0;
+                }
+            });
+
+            let totalInv = 0;
+            const selectedMonth = document.getElementById('month-filter').value;
+            if (selectedMonth === 'ALL') {
+                totalInv = Object.values(productLatestInventory).reduce((sum, val) => sum + val, 0);
+            } else {
+                totalInv = data.reduce((sum, item) => sum + (typeof item.inventory === 'number' ? item.inventory : 0), 0);
+            }
+
+            document.getElementById('kpi-revenue').textContent = formatVND(totalRev);
+            document.getElementById('kpi-profit').textContent = formatVND(totalProf);
+            document.getElementById('kpi-optimization').textContent = formatVND(totalOpt);
+            document.getElementById('kpi-sold').textContent = formatNumber(totalSold);
+            document.getElementById('kpi-inventory').textContent = formatNumber(totalInv);
+        }
+
+        function renderCharts(allData) {
+            let monthMap = {};
+            allData.forEach(item => {
+                let m = item.salesMonth || 'Chưa rõ';
+                if (!monthMap[m]) {
+                    monthMap[m] = { revenue: 0, profit: 0, opt: 0, soldQty: 0 };
+                }
+                monthMap[m].revenue += (item.revenue || 0);
+                monthMap[m].profit += (item.profit || 0);
+                monthMap[m].opt += (item.opt || 0);
+                monthMap[m].soldQty += (item.soldQty || 0);
+            });
+
+            let months = Object.keys(monthMap).sort();
+            let shortMonths = months.map(m => m.replace('Tháng ', 'T'));
+            let revenues = months.map(m => Math.round(monthMap[m].revenue / 1000000)); 
+            let profits = months.map(m => Math.round(monthMap[m].profit / 1000000));   
+            let opts = months.map(m => Math.round(monthMap[m].opt / 1000000));         
+            let volumes = months.map(m => monthMap[m].soldQty);
+
+            const commonOptions = (unitLabel) => ({
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        font: { weight: '600', size: 11 },
+                        color: '#475569',
+                        formatter: (val) => val > 0 ? val.toLocaleString('vi-VN') : ''
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#f1f5f9' },
+                        ticks: { font: { size: 11 } }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { font: { size: 11, weight: '500' } }
+                    }
+                }
+            });
+
+            // Chart 1: Doanh Thu
+            const ctxRev = document.getElementById('revenueChart').getContext('2d');
+            if (charts.revenue) charts.revenue.destroy();
+            charts.revenue = new Chart(ctxRev, {
+                type: 'bar',
+                data: {
+                    labels: shortMonths,
+                    datasets: [{
+                        data: revenues,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 6,
+                    }]
+                },
+                options: commonOptions('Tr VNĐ')
+            });
+
+            // Chart 2: Sản Lượng
+            const ctxVolume = document.getElementById('volumeChart').getContext('2d');
+            if (charts.volume) charts.volume.destroy();
+            charts.volume = new Chart(ctxVolume, {
+                type: 'bar',
+                data: {
+                    labels: shortMonths,
+                    datasets: [{
+                        data: volumes,
+                        backgroundColor: '#f97316',
+                        borderRadius: 6,
+                    }]
+                },
+                options: commonOptions('Chiếc')
+            });
+
+            // Chart 3: Lợi Nhuận
+            const ctxProfit = document.getElementById('profitChart').getContext('2d');
+            if (charts.profit) charts.profit.destroy();
+            charts.profit = new Chart(ctxProfit, {
+                type: 'bar',
+                data: {
+                    labels: shortMonths,
+                    datasets: [{
+                        data: profits,
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6,
+                    }]
+                },
+                options: commonOptions('Tr VNĐ')
+            });
+
+            // Chart 4: Tối Ưu
+            const ctxOpt = document.getElementById('optimizationChart').getContext('2d');
+            if (charts.optimization) charts.optimization.destroy();
+            charts.optimization = new Chart(ctxOpt, {
+                type: 'bar',
+                data: {
+                    labels: shortMonths,
+                    datasets: [{
+                        data: opts,
+                        backgroundColor: '#a855f7',
+                        borderRadius: 6,
+                    }]
+                },
+                options: commonOptions('Tr VNĐ')
+            });
+        }
+
+        function showNotification(message) {
+            const div = document.createElement('div');
+            div.className = `fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all transform translate-y-2 opacity-0 bg-slate-800`;
+            div.textContent = message;
+            document.body.appendChild(div);
+            setTimeout(() => { div.classList.remove('translate-y-2', 'opacity-0'); }, 50);
+            setTimeout(() => {
+                div.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => div.remove(), 300);
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
