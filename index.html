@@ -46,10 +46,6 @@
                         <option value="ALL">Tất cả các tháng</option>
                     </select>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs sm:text-sm font-medium text-slate-700">Sản phẩm:</span>
-                    <input type="text" id="search-input" oninput="filterData()" placeholder="Tìm tên sản phẩm..." class="bg-slate-50 border border-slate-300 text-slate-900 text-xs sm:text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 p-2 w-40 sm:w-56">
-                </div>
             </div>
             <div id="sync-status" class="text-xs text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl flex items-center">
                 <i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-indigo-600"></i> Đang kết nối Google Sheet...
@@ -169,7 +165,7 @@
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 class="text-base font-bold text-slate-900"><i class="fa-solid fa-triangle-exclamation text-rose-500 mr-2"></i>Cảnh Báo: Danh Sách Lô Hàng Tồn Kho</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Tính tồn lũy kế đến hết tháng đã chọn (Tổng nhập từ đầu đến tháng chọn trừ đi Tổng bán từ đầu đến tháng chọn). Các mã đã hết hàng (tồn = 0) sẽ được ẩn đi.</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Tồn kho được tính tự động theo tháng bán ra đang chọn (Lấy tổng nhập từ các lô từ tháng chọn trở về trước trừ đi tổng bán từ các lô từ tháng chọn trở về trước). Các mã đã hết hàng (tồn <= 0) tự động ẩn.</p>
                 </div>
                 <div class="flex items-center space-x-2">
                     <span id="active-month-badge" class="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-xl font-medium">Tháng: Tất cả các tháng</span>
@@ -203,6 +199,14 @@
         let rawData = [];
         let charts = {};
 
+        const MOCK_CSV_DATA = `STT,Mã Sản Phẩm,Tháng Nhập,Tổng Nhập,Đã Bán,Tháng Bán,Giá Vốn,Doanh Thu,Lợi Nhuận,Tối Ưu,Tồn Kho
+1,IP13PRO-01,Tháng 01/2026,10,6,Tháng 01/2026,120000000,150000000,30000000,5000000,4
+2,SSGALAXY-02,Tháng 01/2026,8,8,Tháng 01/2026,96000000,128000000,32000000,4000000,0
+3,MACBOOKAIR-03,Tháng 02/2026,5,3,Tháng 02/2026,110000000,145000000,35000000,6000000,2
+4,IP14PRO-04,Tháng 02/2026,12,12,Tháng 02/2026,240000000,300000000,60000000,10000000,0
+5,IP15PM-05,Tháng 03/2026,15,10,Tháng 03/2026,375000000,450000000,75000000,12000000,5
+6,IPADPRO-06,Tháng 03/2026,10,4,Tháng 03/2026,180000000,220000000,40000000,8000000,6`;
+
         function formatVND(num) {
             if (num === null || num === undefined || isNaN(num)) return '-';
             return num.toLocaleString('vi-VN') + ' VNĐ';
@@ -222,7 +226,7 @@
             icon.classList.add('fa-spin');
             
             const statusEl = document.getElementById('sync-status');
-            statusEl.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-indigo-600"></i> Đang tải dữ liệu từ Google Sheet...`;
+            statusEl.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-indigo-600"></i> Đang kết nối Google Sheet...`;
 
             fetch(SHEET_URL + '&t=' + new Date().getTime())
                 .then(response => {
@@ -236,10 +240,11 @@
                     showNotification("Đã làm mới dữ liệu từ Google Sheet!");
                 })
                 .catch(error => {
-                    console.error(error);
+                    console.warn('Network or CORS error fetching Google Sheet. Loading fallback demo data.', error);
+                    parseCSV(MOCK_CSV_DATA);
                     icon.classList.remove('fa-spin');
-                    statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5 text-rose-600"></i> Lỗi kết nối Google Sheet.`;
-                    showNotification("Không thể tải dữ liệu từ Google Sheet!", true);
+                    statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-600"></i> Đang dùng dữ liệu mẫu (CORS/Offline).`;
+                    showNotification("Đã tải dữ liệu mẫu (Demo Mode)!", false);
                 });
         }
 
@@ -313,24 +318,30 @@
                 const opt = document.createElement('option');
                 opt.value = m;
                 opt.textContent = m;
-                if (m === currentVal) opt.selected = true;
                 select.appendChild(opt);
             });
+
+            // Nếu chưa chọn tháng nào trước đó (hoặc lần đầu mở trang), tự động chọn tháng mới nhất
+            if (currentVal === 'ALL' || !currentVal) {
+                if (months.length > 0) {
+                    select.value = months[months.length - 1]; // Tháng mới nhất nằm cuối mảng sau khi sort tăng dần
+                }
+            } else {
+                select.value = currentVal;
+            }
         }
 
         function filterData() {
             const selectedMonth = document.getElementById('month-filter').value;
-            const keyword = document.getElementById('search-input').value.toLowerCase().trim();
 
             let filtered = rawData.filter(item => {
                 const matchMonth = (selectedMonth === 'ALL' || item.salesMonth === selectedMonth);
-                const matchKeyword = (!keyword || (item.product && item.product.toLowerCase().includes(keyword)));
-                return matchMonth && matchKeyword;
+                return matchMonth;
             });
 
             updateKPIs(filtered, selectedMonth);
             renderCharts(rawData);
-            renderInventoryAlertTable(selectedMonth, keyword);
+            renderInventoryAlertTable(selectedMonth);
         }
 
         function getMonthNumeric(monthStr) {
@@ -343,14 +354,13 @@
             return 999999;
         }
 
-        function renderInventoryAlertTable(selectedMonth, keyword) {
+        function renderInventoryAlertTable(selectedMonth) {
             const badge = document.getElementById('active-month-badge');
             badge.textContent = `Tháng: ${selectedMonth === 'ALL' ? 'Tất cả các tháng' : selectedMonth}`;
 
             const tbody = document.getElementById('inventory-alert-tbody');
             tbody.innerHTML = '';
 
-            // Xác định mốc tháng được chọn để lọc dữ liệu từ tháng chọn trở về trước
             let relevantData = rawData;
             if (selectedMonth !== 'ALL') {
                 const selNum = getMonthNumeric(selectedMonth);
@@ -360,7 +370,6 @@
                 });
             }
 
-            // Gom nhóm theo mã sản phẩm (Cột B): Tính tổng nhập và tổng bán từ đầu đến hết tháng được chọn
             let productSummary = {};
             relevantData.forEach(item => {
                 let prod = item.product;
@@ -390,11 +399,6 @@
             // Lọc bỏ các mã hàng đã hết hàng (tồn <= 0)
             summaryList = summaryList.filter(item => item.inventory > 0);
 
-            // Lọc theo từ khóa tìm kiếm sản phẩm nếu có
-            if (keyword) {
-                summaryList = summaryList.filter(item => item.product.toLowerCase().includes(keyword));
-            }
-
             if (summaryList.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400 italic">Không có lô hàng tồn kho nào (các mặt hàng đều đã bán hết hoặc không có dữ liệu).</td></tr>`;
                 return;
@@ -420,7 +424,6 @@
             let totalOpt = filteredData.reduce((sum, item) => sum + (item.opt || 0), 0);
             let totalSold = filteredData.reduce((sum, item) => sum + (item.soldQty || 0), 0);
             
-            // Tính tổng tồn kho lũy kế từ đầu đến tháng chọn (chỉ tính các mã còn tồn > 0)
             let relevantData = rawData;
             if (selectedMonth !== 'ALL') {
                 const selNum = getMonthNumeric(selectedMonth);
